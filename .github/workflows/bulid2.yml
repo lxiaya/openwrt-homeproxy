@@ -1,0 +1,71 @@
+name: bulid 2 package
+
+on:
+ workflow_dispatch:
+  push:
+    tags:
+      - v.**
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - aarch64_cortex-a53
+          - x86_64
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Build
+        uses: sbwml/openwrt-gh-action-sdk@go1.21
+        env:
+          ARCH: ${{ matrix.arch }}-23.05-SNAPSHOT
+          FEEDNAME: packages_ci
+          PACKAGES: luci-app-homeproxy
+          NO_REFRESH_CHECK: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: ${{ matrix.arch }}
+          path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
+
+      - name: Zip ipk packages
+        run: |
+          zip -j ${{ matrix.arch }}.zip bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
+          echo -e "**Beta文件说明** 🎈:\n" >> release.txt
+          echo -e "1. Subscription page slow response with a large number of nodes \n" >> release.txt
+          echo -e "2. Refactor nft rules \n" >> release.txt
+          echo -e "3. Support Clash selector, urltest etc \n" >> release.txt
+          echo -e "4. Move ACL settings to a dedicated page \n" >> release.txt
+          echo -e "5. Any other improvements \n" >> release.txt
+          
+      - name: Create Release zip
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.TOKEN }}
+          artifacts: "${{ matrix.arch }}.zip,bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"
+          allowUpdates: true
+          replacesArtifacts: true
+          bodyFile: "release.txt"
+          tag: v1.1.${{ github.run_number }}_${{ matrix.arch }}
+
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          retain_days: 1
+          keep_minimum_runs: 0
+    
+      - name: Remove old Releases
+        uses: dev-drprasad/delete-older-releases@master
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+           GITHUB_TOKEN: ${{ secrets.TOKEN }}
