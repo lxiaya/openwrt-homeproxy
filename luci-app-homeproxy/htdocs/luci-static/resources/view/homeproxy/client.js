@@ -264,14 +264,18 @@ return view.extend({
 		o.depends('routing_mode', 'custom');
 
 		ss = o.subsection;
+		so = ss.option(form.Flag, 'tun_gso', _('Generic segmentation offload'));
+		so.default = so.disabled;
+		so.depends('homeproxy.config.proxy_mode', 'redirect_tun');
+		so.depends('homeproxy.config.proxy_mode', 'tun');
+		so.rmempty = false;
+
 		so = ss.option(form.ListValue, 'tcpip_stack', _('TCP/IP stack'),
 			_('TCP/IP stack.'));
 		if (features.with_gvisor) {
 			so.value('mixed', _('Mixed'));
 			so.value('gvisor', _('gVisor'));
 		}
-		if (features.with_lwip)
-			so.value('lwip', _('LWIP'));
 		so.value('system', _('System'));
 		so.default = 'system';
 		so.depends('homeproxy.config.proxy_mode', 'redirect_tun');
@@ -336,8 +340,7 @@ return view.extend({
 		ss.nodescriptions = true;
 		ss.modaltitle = L.bind(hp.loadModalTitle, this, _('Routing node'), _('Add a routing node'), data[0]);
 		ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
-		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss, {});
-		ss.handleAdd = L.bind(hp.handleAdd, this, ss, {});
+		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 		so = ss.option(form.Value, 'label', _('Label'));
 		so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
@@ -407,15 +410,13 @@ return view.extend({
 		o.depends('routing_mode', 'custom');
 
 		ss = o.subsection;
-		var prefmt = { 'prefix': '', 'suffix': '_host' };
 		ss.addremove = true;
 		ss.rowcolors = true;
 		ss.sortable = true;
 		ss.nodescriptions = true;
 		ss.modaltitle = L.bind(hp.loadModalTitle, this, _('Routing rule'), _('Add a routing rule'), data[0]);
 		ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
-		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss, prefmt);
-		ss.handleAdd = L.bind(hp.handleAdd, this, ss, prefmt);
+		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 		so = ss.option(form.Value, 'label', _('Label'));
 		so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
@@ -601,15 +602,13 @@ return view.extend({
 		o.depends('routing_mode', 'custom');
 
 		ss = o.subsection;
-		var prefmt = { 'prefix': 'dns_', 'suffix': '' };
 		ss.addremove = true;
 		ss.rowcolors = true;
 		ss.sortable = true;
 		ss.nodescriptions = true;
 		ss.modaltitle = L.bind(hp.loadModalTitle, this, _('DNS server'), _('Add a DNS server'), data[0]);
 		ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
-		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss, prefmt);
-		ss.handleAdd = L.bind(hp.handleAdd, this, ss, prefmt);
+		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 		so = ss.option(form.Value, 'label', _('Label'));
 		so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
@@ -693,15 +692,13 @@ return view.extend({
 		o.depends('routing_mode', 'custom');
 
 		ss = o.subsection;
-		var prefmt = { 'prefix': '', 'suffix': '_domain' };
 		ss.addremove = true;
 		ss.rowcolors = true;
 		ss.sortable = true;
 		ss.nodescriptions = true;
 		ss.modaltitle = L.bind(hp.loadModalTitle, this, _('DNS rule'), _('Add a DNS rule'), data[0]);
 		ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
-		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss, prefmt);
-		ss.handleAdd = L.bind(hp.handleAdd, this, ss, prefmt);
+		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 		so = ss.option(form.Value, 'label', _('Label'));
 		so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
