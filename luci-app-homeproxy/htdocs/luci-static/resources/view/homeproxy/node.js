@@ -944,6 +944,12 @@ return view.extend({
 		/* Transport config end */
 
 		/* Wireguard config start */
+		so = ss.option(form.Flag, 'wireguard_gso', _('Generic segmentation offload'));
+		so.default = so.disabled;
+		so.depends('type', 'wireguard');
+		so.rmempty = false;
+		so.modalonly = true;
+
 		so = ss.option(form.DynamicList, 'wireguard_local_address', _('Local address'),
 			_('List of IP (v4 or v6) addresses prefixes to be assigned to the interface.'));
 		so.datatype = 'cidr';
@@ -1168,6 +1174,11 @@ return view.extend({
 			so.value('360', _('360'));
 			so.value('android', _('Android'));
 			so.value('chrome', _('Chrome'));
+			so.value('chrome_psk', _('Chrome PSK'));
+			so.value('chrome_psk_shuffle', _('Chrome PSK Shuffle'));
+			so.value('chrome_padding_psk_shuffle', _('Chrome Padding PSK Shuffle'));
+			so.value('chrome_pq', _('Chrome pq'));
+			so.value('chrome_pq_psk', _('Chrome pq PSK'));
 			so.value('edge', _('Edge'));
 			so.value('firefox', _('Firefox'));
 			so.value('ios', _('iOS'));
@@ -1212,11 +1223,9 @@ return view.extend({
 		so.default = so.disabled;
 		so.modalonly = true;
 
-		if (features.has_mptcp) {
-			so = ss.option(form.Flag, 'tcp_multi_path', _('MultiPath TCP'));
-			so.default = so.disabled;
-			so.modalonly = true;
-		}
+		so = ss.option(form.Flag, 'tcp_multi_path', _('MultiPath TCP'));
+		so.default = so.disabled;
+		so.modalonly = true;
 
 		so = ss.option(form.Flag, 'udp_fragment', _('UDP Fragment'),
 			_('Enable UDP fragmentation.'));
