@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Build
-        uses: sbwml/openwrt-gh-action-sdk@go1.21
+        uses: sbwml/openwrt-gh-action-sdk@go1.22
         env:
           ARCH: ${{ matrix.arch }}-23.05-SNAPSHOT
           FEEDNAME: packages_ci
@@ -31,7 +31,7 @@ jobs:
           NO_REFRESH_CHECK: true
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3.1.2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}
           path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
