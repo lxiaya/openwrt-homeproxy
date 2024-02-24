@@ -18,7 +18,7 @@ jobs:
           - x86_64
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@main
         with:
           fetch-depth: 0
 
@@ -31,7 +31,7 @@ jobs:
           NO_REFRESH_CHECK: true
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: ${{ matrix.arch }}
           path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
@@ -47,7 +47,7 @@ jobs:
           echo -e "5. Any other improvements \n" >> release.txt
           
       - name: Create Release zip
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@main
         with:
           token: ${{ secrets.TOKEN }}
           artifacts: "${{ matrix.arch }}.zip,bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"
