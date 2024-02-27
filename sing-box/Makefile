@@ -88,7 +88,7 @@ define Package/$(PKG_NAME)/config
 
     config SING_BOX_WITH_REALITY_SERVER
       bool "Build with reality TLS server support"
-      default n
+      default y
 
     config SING_BOX_WITH_SHADOWSOCKSR
       bool "Build with ShadowsockR support"
