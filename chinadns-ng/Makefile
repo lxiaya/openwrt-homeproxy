@@ -1,7 +1,3 @@
-# SPDX-License-Identifier: GPL-3.0-only
-#
-# Copyright (C) 2023 ImmortalWrt.org
-
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=chinadns-ng
@@ -42,7 +38,7 @@ endif
 
 PKG_LICENSE:=AGPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
-PKG_MAINTAINER:=pexcn <i@pexcn.me>
+PKG_MAINTAINER:=sbwml <admin@cooluc.com>
 
 include $(INCLUDE_DIR)/package.mk
 
