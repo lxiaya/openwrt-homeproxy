@@ -15,7 +15,7 @@ jobs:
       matrix:
         arch:
           - aarch64_cortex-a53
-          - x86-64
+          - x86_64
 
     steps:
       - uses: actions/checkout@main
