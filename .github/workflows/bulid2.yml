@@ -27,7 +27,7 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}-23.05-SNAPSHOT
           FEEDNAME: packages_ci
-          PACKAGES: openwrt-homeproxy
+          PACKAGES: luci-app-homeproxy
           NO_REFRESH_CHECK: true
 
       - name: Upload artifacts
