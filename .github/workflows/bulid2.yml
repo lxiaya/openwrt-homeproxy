@@ -25,7 +25,7 @@ jobs:
       - name: Build
         uses: sbwml/openwrt-gh-action-sdk@go1.21
         env:
-          ARCH: ${{ matrix.arch }}-23.05-SNAPSHOT
+          ARCH: ${{ matrix.arch }}-23.05.3-SNAPSHOT
           FEEDNAME: packages_ci
           PACKAGES: luci-app-homeproxy
           NO_REFRESH_CHECK: true
