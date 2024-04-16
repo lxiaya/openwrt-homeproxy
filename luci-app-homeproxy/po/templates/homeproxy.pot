@@ -2320,9 +2320,7 @@ msgstr ""
 msgid "It MUST support TCP query."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:186
 #: htdocs/luci-static/resources/view/homeproxy/client.js:199
-#: htdocs/luci-static/resources/view/homeproxy/client.js:201
 msgid "You can only have two servers set at maximum."
 msgstr ""
 
