@@ -157,7 +157,7 @@ return view.extend({
 
 		o = s.taboption('routing', form.Value, 'dns_server', _('DNS server'),
 			_('You can only have one server set. It MUST support TCP query.'));
-		o.value('wan', _('Use DNS server from WAN'));
+		o.value('wan', _('WAN DNS (read from interface)'));
 		o.value('1.1.1.1', _('CloudFlare Public DNS (1.1.1.1)'));
 		o.value('208.67.222.222', _('Cisco Public DNS (208.67.222.222)'));
 		o.value('8.8.8.8', _('Google Public DNS (8.8.8.8)'));
@@ -182,10 +182,10 @@ return view.extend({
 		}
 
 		if (features.hp_has_chinadns_ng) {
-			o = s.taboption('routing', form.Value, 'china_dns_server', _('China DNS server'),
+			o = s.taboption('routing', form.DynamicList, 'china_dns_server', _('China DNS server'));
 				_('You can only have two servers set at maximum.'));
 			o.value('', _('Disable'));
-			o.value('wan', _('Use DNS server from WAN'));
+			o.value('wan', _('WAN DNS (read from interface)'));
 			o.value('wan_114', _('Use DNS server from WAN + 114DNS'));
 			o.value('223.5.5.5', _('Aliyun Public DNS (223.5.5.5)'));
 			o.value('210.2.4.8', _('CNNIC Public DNS (210.2.4.8)'));
@@ -299,6 +299,7 @@ return view.extend({
 		so = ss.option(form.Flag, 'endpoint_independent_nat', _('Enable endpoint-independent NAT'),
 			_('Performance may degrade slightly, so it is not recommended to enable on when it is not needed.'));
 		so.default = so.enabled;
+		so.depends('tcpip_stack', 'mixed');
 		so.depends('tcpip_stack', 'gvisor');
 		so.rmempty = false;
 
