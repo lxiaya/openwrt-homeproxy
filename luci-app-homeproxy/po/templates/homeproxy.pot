@@ -2242,12 +2242,11 @@ msgid "Use ACME TLS certificate issuer."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:160
-#: htdocs/luci-static/resources/view/homeproxy/client.js:188
-msgid "Use DNS server from WAN"
+msgid "WAN DNS (read from interface)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:189
-msgid "Use DNS server from WAN + 114DNS"
+#: htdocs/luci-static/resources/view/homeproxy/client.js:186
+msgid "WAN DNS (read from interface)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1077
