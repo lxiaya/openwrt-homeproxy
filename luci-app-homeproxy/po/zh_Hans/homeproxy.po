@@ -2302,8 +2302,8 @@ msgstr "使用 ACME TLS 证书颁发机构。"
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:160
 #: htdocs/luci-static/resources/view/homeproxy/client.js:188
-msgid "Use DNS server from WAN"
-msgstr "使用 WAN 下发的 DNS"
+msgid "WAN DNS (read from interface)"
+msgstr "从接口读取DNS"
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:189
 msgid "Use DNS server from WAN + 114DNS"

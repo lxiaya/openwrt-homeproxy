@@ -2243,7 +2243,7 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:160
 #: htdocs/luci-static/resources/view/homeproxy/client.js:188
-msgid "Use DNS server from WAN"
+msgid "WAN DNS (read from interface)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:189
