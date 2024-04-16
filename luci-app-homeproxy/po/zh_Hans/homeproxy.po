@@ -2301,13 +2301,13 @@ msgid "Use ACME TLS certificate issuer."
 msgstr "使用 ACME TLS 证书颁发机构。"
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:160
-#: htdocs/luci-static/resources/view/homeproxy/client.js:188
+#: htdocs/luci-static/resources/view/homeproxy/client.js:186
 msgid "WAN DNS (read from interface)"
-msgstr "从接口读取 DNS"
+msgstr "WAN DNS (从接口读取)"
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:189
-msgid "Use DNS server from WAN + 114DNS"
-msgstr "使用 WAN DNS + 114DNS"
+msgid "(read from interface) WAN DNS + 114DNS"
+msgstr "(从接口读取) WAN DNS + 114DNS"
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1077
 #: htdocs/luci-static/resources/view/homeproxy/server.js:481
@@ -2376,11 +2376,11 @@ msgid "Xudp (Xray-core)"
 msgstr "Xudp (Xray-core)"
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:159
-msgid "You can only have one server set. It MUST support TCP query."
-msgstr "您只能设置一个服务器。它必须支持 TCP 查询。"
+msgid "It MUST support TCP query."
+msgstr "它必须支持 TCP 查询。"
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:186
-#: htdocs/luci-static/resources/view/homeproxy/client.js:201
+#: htdocs/luci-static/resources/view/homeproxy/client.js:198
+#: htdocs/luci-static/resources/view/homeproxy/client.js:199
 msgid "You can only have two servers set at maximum."
 msgstr "您最多只能设置两个服务器。"
 

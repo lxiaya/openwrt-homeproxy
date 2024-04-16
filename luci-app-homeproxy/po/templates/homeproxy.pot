@@ -2242,12 +2242,12 @@ msgid "Use ACME TLS certificate issuer."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:160
-#: htdocs/luci-static/resources/view/homeproxy/client.js:188
+#: htdocs/luci-static/resources/view/homeproxy/client.js:186
 msgid "WAN DNS (read from interface)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:189
-msgid "Use DNS server from WAN + 114DNS"
+msgid "(read from interface) WAN DNS + 114DNS"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1077
@@ -2317,11 +2317,11 @@ msgid "Xudp (Xray-core)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:159
-msgid "You can only have one server set. It MUST support TCP query."
+msgid "It MUST support TCP query."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:186
-#: htdocs/luci-static/resources/view/homeproxy/client.js:201
+#: htdocs/luci-static/resources/view/homeproxy/client.js:198
+#: htdocs/luci-static/resources/view/homeproxy/client.js:199
 msgid "You can only have two servers set at maximum."
 msgstr ""
 
