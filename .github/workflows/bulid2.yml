@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Build
-        uses: sbwml/openwrt-gh-action-sdk@go1.21
+        uses: kenzok8/gh-action-sdk@hash
         env:
           ARCH: ${{ matrix.arch }}-23.05-SNAPSHOT
           FEEDNAME: packages_ci
