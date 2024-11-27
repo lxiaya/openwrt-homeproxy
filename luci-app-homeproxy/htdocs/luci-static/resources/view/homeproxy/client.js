@@ -48,13 +48,13 @@ function getServiceStatus() {
 	});
 }
 
-function renderStatus(isRunning) {
-	var spanTemp = '<em><span style="color:%s"><strong>%s %s</strong></span></em>';
+function renderStatus(isRunning, version) {
+	var spanTemp = '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>';
 	var renderHTML;
 	if (isRunning)
-		renderHTML = spanTemp.format('green', _('HomeProxy'), _('RUNNING'));
+		renderHTML = spanTemp.format('green', _('HomeProxy'), version, _('RUNNING'));
 	else
-		renderHTML = spanTemp.format('red', _('HomeProxy'), _('NOT RUNNING'));
+		renderHTML = spanTemp.format('red', _('HomeProxy'), version, _('NOT RUNNING'));
 
 	return renderHTML;
 }
@@ -106,23 +106,6 @@ return view.extend({
 		var features = data[1],
 		    hosts = data[2]?.hosts;
 
-		m = new form.Map('homeproxy', _('HomeProxy'),
-			_('The modern ImmortalWrt proxy platform for ARM64/AMD64.'));
-
-		s = m.section(form.TypedSection);
-		s.render = function () {
-			poll.add(function () {
-				return L.resolveDefault(getServiceStatus()).then((res) => {
-					var view = document.getElementById('service_status');
-					view.innerHTML = renderStatus(res);
-				});
-			});
-
-			return E('div', { class: 'cbi-section', id: 'status_bar' }, [
-					E('p', { id: 'service_status' }, _('Collecting data...'))
-			]);
-		}
-
 		/* Cache all configured proxy nodes, they will be called multiple times */
 		var proxy_nodes = {};
 		uci.sections(data[0], 'node', (res) => {
@@ -133,6 +116,23 @@ return view.extend({
 				String.format('[%s] %s', res.type, res.label || ((stubValidator.apply('ip6addr', nodeaddr) ?
 					String.format('[%s]', nodeaddr) : nodeaddr) + ':' + nodeport));
 		});
+
+		m = new form.Map('homeproxy', _('HomeProxy'),
+			_('The modern ImmortalWrt proxy platform for ARM64/AMD64.'));
+
+		s = m.section(form.TypedSection);
+		s.render = function () {
+			poll.add(function () {
+				return L.resolveDefault(getServiceStatus()).then((res) => {
+					var view = document.getElementById('service_status');
+					view.innerHTML = renderStatus(res, features.version);
+				});
+			});
+
+			return E('div', { class: 'cbi-section', id: 'status_bar' }, [
+					E('p', { id: 'service_status' }, _('Collecting data...'))
+			]);
+		}
 
 		s = m.section(form.NamedSection, 'config', 'homeproxy');
 
@@ -164,7 +164,7 @@ return view.extend({
 		o.value('', '---');
 		o.value('223.5.5.5', _('Aliyun Public DNS (223.5.5.5)'));
 		o.value('119.29.29.29', _('Tencent Public DNS (119.29.29.29)'));
-		o.value('114.114.114.114', _('Xinfeng Public DNS (114.114.114.114)'));
+		o.value('117.50.10.10', _('ThreatBook Public DNS (117.50.10.10)'));
 		o.default = '8.8.8.8';
 		o.rmempty = false;
 		o.depends({'routing_mode': 'custom', '!reverse': true});
@@ -187,7 +187,7 @@ return view.extend({
 			o.value('223.5.5.5', _('Aliyun Public DNS (223.5.5.5)'));
 			o.value('210.2.4.8', _('CNNIC Public DNS (210.2.4.8)'));
 			o.value('119.29.29.29', _('Tencent Public DNS (119.29.29.29)'));
-			o.value('114.114.114.114', _('Xinfeng Public DNS (114.114.114.114)'));
+			o.value('117.50.10.10', _('ThreatBook Public DNS (117.50.10.10)'));
 			o.depends('routing_mode', 'bypass_mainland_china');
 			o.validate = function(section_id) {
 				if (section_id) {
@@ -234,14 +234,10 @@ return view.extend({
 
 		o = s.taboption('routing', form.Value, 'routing_port', _('Routing ports'),
 			_('Specify target ports to be proxied. Multiple ports must be separated by commas.'));
-		o.value('all', _('All ports'));
+		o.value('', _('All ports'));
 		o.value('common', _('Common ports only (bypass P2P traffic)'));
-		o.default = 'common';
-		o.rmempty = false;
 		o.validate = function(section_id, value) {
-			if (section_id && value !== 'all' && value !== 'common') {
-				if (!value)
-					return _('Expecting: %s').format(_('valid port value'));
+			if (section_id && value && value !== 'common') {
 
 				var ports = [];
 				for (var i of value.split(',')) {
@@ -313,10 +309,24 @@ return view.extend({
 		so.depends('tcpip_stack', 'gvisor');
 		so.rmempty = false;
 
+		so = ss.option(form.Value, 'udp_timeout', _('UDP NAT expiration time'),
+			_('In seconds. <code>300</code> is used by default.'));
+		so.datatype = 'uinteger';
+		so.default = '300';
+		so.depends('homeproxy.config.proxy_mode', 'redirect_tproxy');
+		so.depends('homeproxy.config.proxy_mode', 'redirect_tun');
+		so.depends('homeproxy.config.proxy_mode', 'tun');
+		so.rmempty = false;
+
 		so = ss.option(form.Flag, 'bypass_cn_traffic', _('Bypass CN traffic'),
 			_('Bypass mainland China traffic via firewall rules by default.'));
 		so.default = so.disabled;
 		so.rmempty = false;
+
+		so = ss.option(form.ListValue, 'domain_strategy', _('Domain strategy'),
+			_('If set, the requested domain name will be resolved to IP before routing.'));
+		for (var i in hp.dns_strategy)
+			so.value(i, hp.dns_strategy[i])
 
 		so = ss.option(form.Flag, 'sniff_override', _('Override destination'),
 			_('Override the connection destination address with the sniffed domain.'));
@@ -374,7 +384,7 @@ return view.extend({
 		so.editable = true;
 
 		so = ss.option(form.ListValue, 'domain_strategy', _('Domain strategy'),
-			_('If set, the server domain name will be resolved to IP before connecting.<br/>dns.strategy will be used if empty.'));
+			_('If set, the server domain name will be resolved to IP before connecting.<br/>'));
 		for (var i in hp.dns_strategy)
 			so.value(i, hp.dns_strategy[i]);
 		so.modalonly = true;
@@ -432,11 +442,11 @@ return view.extend({
 		ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
 		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
-		ss.tab('field_other', _('Other Fields'));
-		ss.tab('field_host', _('Host Fields'));
-		ss.tab('field_port', _('Port Fields'));
-		ss.tab('field_source_ip', _('SRC-IP Fields'));
-		ss.tab('field_source_port', _('SRC-Port Fields'));
+		ss.tab('field_other', _('Other fields'));
+		ss.tab('field_host', _('Host fields'));
+		ss.tab('field_port', _('Port fields'));
+		ss.tab('field_source_ip', _('SRC-IP fields'));
+		ss.tab('field_source_port', _('SRC-Port fields'));
 
 		so = ss.taboption('field_other', form.Value, 'label', _('Label'));
 		so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
@@ -470,10 +480,31 @@ return view.extend({
 
 		so = ss.taboption('field_other', form.MultiValue, 'protocol', _('Protocol'),
 			_('Sniffed protocol, see <a target="_blank" href="https://sing-box.sagernet.org/configuration/route/sniff/">Sniff</a> for details.'));
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0)
+			so.value('bittorrent', _('BitTorrent'));
+		so.value('dns', _('DNS'));
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0)
+			so.value('dtls', _('DTLS'));
 		so.value('http', _('HTTP'));
-		so.value('tls', _('TLS'));
 		so.value('quic', _('QUIC'));
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so.value('rdp', _('RDP'));
+			so.value('ssh', _('SSH'));
+		}
 		so.value('stun', _('STUN'));
+		so.value('tls', _('TLS'));
+
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so = ss.taboption('field_other', form.Value, 'client', _('Client'),
+				_('Sniffed client type (QUIC client type or SSH client name).'));
+			so.value('chromium', _('Chromium / Cronet'));
+			so.value('firefox', _('Firefox / uquic firefox'));
+			so.value('quic-go', _('quic-go / uquic chrome'));
+			so.value('safari', _('Safari / Apple Network API'));
+			so.depends('protocol', 'quic');
+			so.depends('protocol', 'ssh');
+			so.modalonly = true;
+		}
 
 		so = ss.taboption('field_other', form.ListValue, 'network', _('Network'));
 		so.value('tcp', _('TCP'));
@@ -547,6 +578,12 @@ return view.extend({
 			_('Match process path.'));
 		so.modalonly = true;
 
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so = ss.taboption('field_other', form.DynamicList, 'process_path_regex', _('Process path (regex)'),
+				_('Match process path using regular expression.'));
+			so.modalonly = true;
+		}
+
 		so = ss.taboption('field_other', form.DynamicList, 'user', _('User'),
 			_('Match user name.'));
 		so.modalonly = true;
@@ -567,10 +604,9 @@ return view.extend({
 		}
 		so.modalonly = true;
 
-		so = ss.taboption('field_other', form.Flag, 'rule_set_ipcidr_match_source', _('Match source IP via rule set'),
+		so = ss.taboption('field_other', form.Flag, 'rule_set_ip_cidr_match_source', _('Match source IP via rule set'),
 			_('Make IP CIDR in rule set used to match the source IP.'));
 		so.default = so.disabled;
-		so.rmempty = false;
 		so.modalonly = true;
 
 		so = ss.taboption('field_other', form.Flag, 'invert', _('Invert'),
@@ -716,7 +752,7 @@ return view.extend({
 		so.modalonly = true;
 
 		so = ss.option(form.ListValue, 'address_strategy', _('Address strategy'),
-			_('The domain strategy for resolving the domain name in the address. dns.strategy will be used if empty.'));
+			_('The domain strategy for resolving the domain name in the address.'));
 		for (var i in hp.dns_strategy)
 			so.value(i, hp.dns_strategy[i]);
 		so.modalonly = true;
@@ -764,11 +800,11 @@ return view.extend({
 		ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
 		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
-		ss.tab('field_other', _('Other Fields'));
-		ss.tab('field_host', _('Host Fields'));
-		ss.tab('field_port', _('Port Fields'));
-		ss.tab('field_source_ip', _('SRC-IP Fields'));
-		ss.tab('field_source_port', _('SRC-Port Fields'));
+		ss.tab('field_other', _('Other fields'));
+		ss.tab('field_host', _('Host fields'));
+		ss.tab('field_port', _('Port fields'));
+		ss.tab('field_source_ip', _('SRC-IP fields'));
+		ss.tab('field_source_port', _('SRC-Port fields'));
 
 		so = ss.taboption('field_other', form.Value, 'label', _('Label'));
 		so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
@@ -810,11 +846,18 @@ return view.extend({
 
 		so = ss.taboption('field_other', form.MultiValue, 'protocol', _('Protocol'),
 			_('Sniffed protocol, see <a target="_blank" href="https://sing-box.sagernet.org/configuration/route/sniff/">Sniff</a> for details.'));
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so.value('bittorrent', _('BitTorrent'));
+			so.value('dtls', _('DTLS'));
+		}
 		so.value('http', _('HTTP'));
-		so.value('tls', _('TLS'));
 		so.value('quic', _('QUIC'));
-		so.value('dns', _('DNS'));
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so.value('rdp', _('RDP'));
+			so.value('ssh', _('SSH'));
+		}
 		so.value('stun', _('STUN'));
+		so.value('tls', _('TLS'));
 
 		so = ss.taboption('field_host', form.DynamicList, 'domain', _('Domain name'),
 			_('Match full domain.'));
@@ -881,6 +924,12 @@ return view.extend({
 			_('Match process path.'));
 		so.modalonly = true;
 
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so = ss.taboption('field_other', form.DynamicList, 'process_path_regex', _('Process path (regex)'),
+				_('Match process path using regular expression.'));
+			so.modalonly = true;
+		}
+
 		so = ss.taboption('field_other', form.DynamicList, 'user', _('User'),
 			_('Match user name.'));
 		so.modalonly = true;
@@ -901,10 +950,17 @@ return view.extend({
 		}
 		so.modalonly = true;
 
-		so = ss.taboption('field_other', form.Flag, 'rule_set_ipcidr_match_source', _('Rule set IP CIDR as source IP'),
-			_('Make <code>ipcidr</code> in rule sets match the source IP.'));
+		so = ss.taboption('field_other', form.Flag, 'rule_set_ip_cidr_match_source', _('Rule set IP CIDR as source IP'),
+			_('Make IP CIDR in rule sets match the source IP.'));
 		so.default = so.disabled;
 		so.modalonly = true;
+
+		if (features.version.localeCompare('1.10.0', undefined, { numeric: true, sensitivity: 'base' }) >= 0) {
+			so = ss.taboption('field_other', form.Flag, 'rule_set_ip_cidr_accept_empty', _('Accept empty query response'),
+				_('Make IP CIDR in rule-sets accept empty query response.'));
+			so.default = so.disabled;
+			so.modalonly = true;
+		}
 
 		so = ss.taboption('field_other', form.Flag, 'invert', _('Invert'),
 			_('Invert match result.'));
@@ -912,7 +968,7 @@ return view.extend({
 		so.modalonly = true;
 
 		so = ss.taboption('field_other', form.MultiValue, 'outbound', _('Outbound'),
-			_('Match outbound.'));
+			_('Match the server name of outbound.'));
 		so.load = function(section_id) {
 			delete this.keylist;
 			delete this.vallist;
@@ -996,9 +1052,9 @@ return view.extend({
 		so.rmempty = false;
 
 		so = ss.option(form.ListValue, 'format', _('Format'));
-		so.value('source', _('Source file'));
 		so.value('binary', _('Binary file'));
-		so.default = 'source';
+		so.value('source', _('Source file'));
+		so.default = 'binary';
 		so.rmempty = false;
 
 		so = ss.option(form.Value, 'path', _('Path'));
@@ -1036,6 +1092,7 @@ return view.extend({
 			delete this.keylist;
 			delete this.vallist;
 
+			this.value('', _('Default'));
 			this.value('direct-out', _('Direct'));
 			uci.sections(data[0], 'routing_node', (res) => {
 				if (res.enabled === '1')
@@ -1044,8 +1101,6 @@ return view.extend({
 
 			return this.super('load', section_id);
 		}
-		so.default = 'direct-out';
-		so.rmempty = false;
 		so.depends('type', 'remote');
 
 		so = ss.option(form.Value, 'update_interval', _('Update interval'),
