@@ -1,18 +1,20 @@
 name: bulid 2 package
 
 on:
- workflow_dispatch:
+  workflow_dispatch:
   push:
     tags:
       - v.**
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }}
+    name: build ${{ matrix.arch }}-${{ matrix.sdk }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        sdk:
+          - 23.05.5
         arch:
           - aarch64_cortex-a53
           - x86_64
@@ -25,7 +27,7 @@ jobs:
       - name: Build
         uses: kenzok8/gh-action-sdk@hash
         env:
-          ARCH: ${{ matrix.arch }}-23.05-SNAPSHOT
+          ARCH: ${{ matrix.arch }}-${{ matrix.sdk }}
           FEEDNAME: packages_ci
           PACKAGES: luci-app-homeproxy
           NO_REFRESH_CHECK: true
