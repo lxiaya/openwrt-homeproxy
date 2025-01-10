@@ -13,8 +13,8 @@ import { connect } from 'ubus';
 import { cursor } from 'uci';
 
 import {
-	executeCommand, isEmpty, strToBool, strToInt,
-	removeBlankAttrs, validateHostname, validation,
+	isEmpty, strToBool, strToInt,
+	removeBlankAttrs, validation,
 	HP_DIR, RUN_DIR
 } from 'homeproxy';
 
@@ -30,7 +30,6 @@ uci.load(uciconfig);
 
 const uciinfra = 'infra',
       ucimain = 'config',
-      uciexp = 'experimental',
       ucicontrol = 'control';
 
 const ucidnssetting = 'dns',
@@ -53,8 +52,9 @@ if (!wan_dns)
 const dns_port = uci.get(uciconfig, uciinfra, 'dns_port') || '5333';
 
 let main_node, main_udp_node, dedicated_udp_node, default_outbound, domain_strategy, sniff_override = '1',
-    dns_server, dns_default_strategy, dns_default_server, dns_disable_cache, dns_disable_cache_expire,
-    dns_independent_cache, dns_client_subnet, direct_domain_list, proxy_domain_list;
+    dns_server, china_dns_server, dns_default_strategy, dns_default_server, dns_disable_cache,
+    dns_disable_cache_expire, dns_independent_cache, dns_client_subnet, cache_file_store_rdrc,
+    cache_file_rdrc_timeout, direct_domain_list, proxy_domain_list;
 
 if (routing_mode !== 'custom') {
 	main_node = uci.get(uciconfig, ucimain, 'main_node') || 'nil';
@@ -64,6 +64,12 @@ if (routing_mode !== 'custom') {
 	dns_server = uci.get(uciconfig, ucimain, 'dns_server');
 	if (isEmpty(dns_server) || dns_server === 'wan')
 		dns_server = wan_dns;
+
+	if (routing_mode === 'bypass_mainland_china') {
+		china_dns_server = uci.get(uciconfig, ucimain, 'china_dns_server');
+		if (isEmpty(china_dns_server) || type(china_dns_server) !== 'string' || china_dns_server === 'wan')
+			china_dns_server = wan_dns;
+	}
 
 	direct_domain_list = trim(readfile(HP_DIR + '/resources/direct_list.txt'));
 	if (direct_domain_list)
@@ -80,6 +86,8 @@ if (routing_mode !== 'custom') {
 	dns_disable_cache_expire = uci.get(uciconfig, ucidnssetting, 'disable_cache_expire');
 	dns_independent_cache = uci.get(uciconfig, ucidnssetting, 'independent_cache');
 	dns_client_subnet = uci.get(uciconfig, ucidnssetting, 'client_subnet');
+	cache_file_store_rdrc = uci.get(uciconfig, ucidnssetting, 'cache_file_store_rdrc'),
+	cache_file_rdrc_timeout = uci.get(uciconfig, ucidnssetting, 'cache_file_rdrc_timeout');
 
 	/* Routing settings */
 	default_outbound = uci.get(uciconfig, uciroutingsetting, 'default_outbound') || 'nil';
@@ -90,9 +98,6 @@ if (routing_mode !== 'custom') {
 const proxy_mode = uci.get(uciconfig, ucimain, 'proxy_mode') || 'redirect_tproxy',
       ipv6_support = uci.get(uciconfig, ucimain, 'ipv6_support') || '0',
       default_interface = uci.get(uciconfig, ucicontrol, 'bind_interface');
-
-const cache_file_store_rdrc = uci.get(uciconfig, uciexp, 'cache_file_store_rdrc'),
-      cache_file_rdrc_timeout = uci.get(uciconfig, uciexp, 'cache_file_rdrc_timeout');
 
 const mixed_port = uci.get(uciconfig, uciinfra, 'mixed_port') || '5330';
 let self_mark, redirect_port, tproxy_port,
@@ -300,6 +305,8 @@ function get_outbound(cfg) {
 			const node = uci.get(uciconfig, cfg, 'node');
 			if (isEmpty(node))
 				die(sprintf("%s's node is missing, please check your configuration.", cfg));
+			else if (node === 'urltest')
+				return 'cfg-' + cfg + '-out';
 			else
 				return 'cfg-' + node + '-out';
 		}
@@ -365,54 +372,70 @@ config.dns = {
 };
 
 if (!isEmpty(main_node)) {
+	/* Main DNS */
+	push(config.dns.servers, {
+		tag: 'main-dns',
+		address: !match(dns_server, /:\/\//) ? 'tcp://' + (validation('ip6addr', dns_server) ? `[${dns_server}]` : dns_server) : dns_server,
+		strategy: (ipv6_support !== '1') ? 'ipv4_only' : null,
+		address_resolver: 'default-dns',
+		address_strategy: (ipv6_support !== '1') ? 'ipv4_only' : null,
+		detour: 'main-out'
+	});
+	config.dns.final = 'main-dns';
+
 	/* Avoid DNS loop */
-	const main_node_addr = uci.get(uciconfig, main_node, 'address');
-	if (validateHostname(main_node_addr))
-		push(config.dns.rules, {
-			domain: main_node_addr,
-			server: 'default-dns'
-		});
+	push(config.dns.rules, {
+		outbound: 'any',
+		server: 'default-dns'
+	});
 
-	if (dedicated_udp_node) {
-		const main_udp_node_addr = uci.get(uciconfig, main_udp_node, 'address');
-		if (validateHostname(main_udp_node_addr))
-			push(config.dns.rules, {
-				domain: main_udp_node_addr,
-				server: 'default-dns'
-			});
-	}
-
-	if (direct_domain_list)
+	if (length(direct_domain_list))
 		push(config.dns.rules, {
-			domain_keyword: direct_domain_list,
-			server: 'default-dns'
+			rule_set: 'direct-domain',
+			server: (routing_mode === 'bypass_mainland_china' ) ? 'china-dns' : 'default-dns'
 		});
 
 	/* Filter out SVCB/HTTPS queries for "exquisite" Apple devices */
-	if (routing_mode === 'gfwlist' || proxy_domain_list)
+	if (routing_mode === 'gfwlist' || length(proxy_domain_list))
 		push(config.dns.rules, {
-			domain_keyword: (routing_mode !== 'gfwlist') ? proxy_domain_list : null,
+			rule_set: (routing_mode !== 'gfwlist') ? 'proxy-domain' : null,
 			query_type: [64, 65],
 			server: 'block-dns'
 		});
 
-	if (isEmpty(config.dns.rules))
-		config.dns.rules = null;
-
-	let default_final_dns = 'default-dns';
-	/* Main DNS */
-	if (dns_server !== wan_dns) {
+	if (routing_mode === 'bypass_mainland_china') {
 		push(config.dns.servers, {
-			tag: 'main-dns',
-			address: 'tcp://' + (validation('ip6addr', dns_server) ? `[${dns_server}]` : dns_server),
-			strategy: (ipv6_support !== '1') ? 'ipv4_only' : null,
-			detour: 'main-out'
+			tag: 'china-dns',
+			address: china_dns_server,
+			detour: 'direct-out'
 		});
 
-		default_final_dns = 'main-dns';
+		if (length(proxy_domain_list))
+			push(config.dns.rules, {
+				rule_set: 'proxy-domain',
+				server: 'main-dns'
+			});
+
+		push(config.dns.rules, {
+			rule_set: 'geosite-cn',
+			server: 'china-dns'
+		});
+		push(config.dns.rules, {
+			type: 'logical',
+			mode: 'and',
+			rules: [
+				{
+					rule_set: 'geosite-noncn',
+					invert: true
+				},
+				{
+					rule_set: 'geoip-cn'
+				}
+			],
+			server: 'china-dns'
+		});
 	}
 
-	config.dns.final = default_final_dns;
 } else if (!isEmpty(default_outbound)) {
 	/* DNS servers */
 	uci.foreach(uciconfig, ucidnsserver, (cfg) => {
@@ -458,9 +481,7 @@ if (!isEmpty(main_node)) {
 			process_path_regex: cfg.process_path_regex,
 			user: cfg.user,
 			rule_set: get_ruleset(cfg.rule_set),
-			/* rule_set_ipcidr_match_source is deprecated in sing-box 1.10.0 */
-			rule_set_ipcidr_match_source: (features.version < '1.10.0' && cfg.rule_set_ip_cidr_match_source  === '1') || null,
-			rule_set_ip_cidr_match_source: (features.version >= '1.10.0' && cfg.rule_set_ip_cidr_match_source  === '1') || null,
+			rule_set_ip_cidr_match_source: (cfg.rule_set_ip_cidr_match_source  === '1') || null,
 			invert: (cfg.invert === '1') || null,
 			outbound: get_outbound(cfg.outbound),
 			server: get_resolver(cfg.server),
@@ -530,9 +551,7 @@ if (match(proxy_mode, /tun/))
 
 		interface_name: tun_name,
 		/* inet4_address and inet6_address are deprecated in sing-box 1.10.0 */
-		inet4_address: (features.version < '1.10.0') ? tun_addr4 : null,
-		inet6_address: (features.version < '1.10.0' && ipv6_support === '1') ? tun_addr6 : null,
-		address: (features.version >= '1.10.0') ? ((ipv6_support === '1') ? [tun_addr4, tun_addr6] : [tun_addr4]) : null,
+		address: (ipv6_support === '1') ? [tun_addr4, tun_addr6] : [tun_addr4],
 		mtu: strToInt(tun_mtu),
 		gso: (tun_gso === '1'),
 		auto_route: false,
@@ -567,24 +586,48 @@ config.outbounds = [
 if (!isEmpty(main_node)) {
 	const main_node_cfg = uci.get_all(uciconfig, main_node) || {};
 	push(config.outbounds, generate_outbound(main_node_cfg));
+	config.outbounds[length(config.outbounds)-1].domain_strategy = (ipv6_support !== '1') ? 'prefer_ipv4' : null;
 	config.outbounds[length(config.outbounds)-1].tag = 'main-out';
 
 	if (dedicated_udp_node) {
 		const main_udp_node_cfg = uci.get_all(uciconfig, main_udp_node) || {};
 		push(config.outbounds, generate_outbound(main_udp_node_cfg));
+		config.outbounds[length(config.outbounds)-1].domain_strategy = (ipv6_support !== '1') ? 'prefer_ipv4' : null;
 		config.outbounds[length(config.outbounds)-1].tag = 'main-udp-out';
 	}
-} else if (!isEmpty(default_outbound))
+} else if (!isEmpty(default_outbound)) {
+	let urltest_nodes = [],
+	    routing_nodes = [];
+
 	uci.foreach(uciconfig, uciroutingnode, (cfg) => {
 		if (cfg.enabled !== '1')
 			return;
 
-		const outbound = uci.get_all(uciconfig, cfg.node) || {};
-		push(config.outbounds, generate_outbound(outbound));
-		config.outbounds[length(config.outbounds)-1].domain_strategy = cfg.domain_strategy;
-		config.outbounds[length(config.outbounds)-1].bind_interface = cfg.bind_interface;
-		config.outbounds[length(config.outbounds)-1].detour = get_outbound(cfg.outbound);
+		if (cfg.node === 'urltest') {
+			push(config.outbounds, {
+				type: 'urltest',
+				tag: 'cfg-' + cfg['.name'] + '-out',
+				outbounds: map(cfg.urltest_nodes, (k) => `cfg-${k}-out`),
+				url: cfg.urltest_url,
+				interval: cfg.urltest_interval ? (cfg.urltest_interval + 's') : null,
+				tolerance: strToInt(cfg.urltest_tolerance),
+				idle_timeout: cfg.urltest_idle_timeout ? (cfg.urltest_idle_timeout + 's') : null,
+				interrupt_exist_connections: (cfg.urltest_interrupt_exist_connections === '1')
+			});
+			urltest_nodes = [...urltest_nodes, ...filter(cfg.urltest_nodes, ((l) => !~index(urltest_nodes, l)))];
+		} else {
+			const outbound = uci.get_all(uciconfig, cfg.node) || {};
+			push(config.outbounds, generate_outbound(outbound));
+			config.outbounds[length(config.outbounds)-1].domain_strategy = cfg.domain_strategy;
+			config.outbounds[length(config.outbounds)-1].bind_interface = cfg.bind_interface;
+			config.outbounds[length(config.outbounds)-1].detour = get_outbound(cfg.outbound);
+			push(routing_nodes, cfg.node);
+		}
 	});
+
+	for (let i in filter(urltest_nodes, ((l) => !~index(routing_nodes, l))))
+		push(config.outbounds, generate_outbound(uci.get_all(uciconfig, i)));
+}
 /* Outbound end */
 
 /* Routing rules start */
@@ -603,12 +646,10 @@ config.route = {
 
 /* Routing rules */
 if (!isEmpty(main_node)) {
-	/* Direct list */
-	if (length(direct_domain_list))
-		push(config.route.rules, {
-			domain_keyword: direct_domain_list,
-			outbound: 'direct-out'
-		});
+	push(config.route.rules, {
+		rule_set: 'direct-domain',
+		outbound: 'direct-out'
+	});
 
 	/* Main UDP out */
 	if (dedicated_udp_node)
@@ -618,6 +659,58 @@ if (!isEmpty(main_node)) {
 		});
 
 	config.route.final = 'main-out';
+
+	/* Rule set */
+	/* Direct list */
+	if (length(direct_domain_list))
+		push(config.route.rule_set, {
+			type: 'inline',
+			tag: 'direct-domain',
+			rules: [
+				{
+					domain_keyword: direct_domain_list,
+				}
+			]
+		});
+
+	/* Proxy list */
+	if (length(proxy_domain_list))
+		push(config.route.rule_set, {
+			type: 'inline',
+			tag: 'proxy-domain',
+			rules: [
+				{
+					domain_keyword: proxy_domain_list,
+				}
+			]
+		});
+
+	if (routing_mode === 'bypass_mainland_china') {
+		push(config.route.rule_set, {
+			type: 'remote',
+			tag: 'geoip-cn',
+			format: 'binary',
+			url: 'https://github.com/1715173329/IPCIDR-CHINA/raw/rule-set/cn.srs',
+			download_detour: 'main-out'
+		});
+		push(config.route.rule_set, {
+			type: 'remote',
+			tag: 'geosite-cn',
+			format: 'binary',
+			url: 'https://github.com/1715173329/sing-geosite/raw/rule-set-unstable/geosite-geolocation-cn.srs',
+			download_detour: 'main-out'
+		});
+		push(config.route.rule_set, {
+			type: 'remote',
+			tag: 'geosite-noncn',
+			format: 'binary',
+			url: 'https://github.com/1715173329/sing-geosite/raw/rule-set-unstable/geosite-geolocation-!cn.srs',
+			download_detour: 'main-out'
+		});
+	}
+
+	if (isEmpty(config.route.rule_set))
+		config.route.rule_set = null;
 } else if (!isEmpty(default_outbound)) {
 	uci.foreach(uciconfig, uciroutingrule, (cfg) => {
 		if (cfg.enabled !== '1')
@@ -645,8 +738,7 @@ if (!isEmpty(main_node)) {
 			user: cfg.user,
 			rule_set: get_ruleset(cfg.rule_set),
 			/* rule_set_ipcidr_match_source is deprecated in sing-box 1.10.0 */
-			rule_set_ipcidr_match_source: (features.version < '1.10.0' && cfg.rule_set_ip_cidr_match_source  === '1') || null,
-			rule_set_ip_cidr_match_source: (features.version >= '1.10.0' && cfg.rule_set_ip_cidr_match_source  === '1') || null,
+			rule_set_ip_cidr_match_source: (cfg.rule_set_ip_cidr_match_source  === '1') || null,
 			rule_set_ip_cidr_accept_empty: (cfg.rule_set_ip_cidr_accept_empty === '1') || null,
 			invert: (cfg.invert === '1') || null,
 			outbound: get_outbound(cfg.outbound)
@@ -654,10 +746,8 @@ if (!isEmpty(main_node)) {
 	});
 
 	config.route.final = get_outbound(default_outbound);
-};
 
-/* Rule set */
-if (routing_mode === 'custom') {
+	/* Rule set */
 	uci.foreach(uciconfig, uciruleset, (cfg) => {
 		if (cfg.enabled !== '1')
 			return null;
@@ -676,13 +766,13 @@ if (routing_mode === 'custom') {
 /* Routing rules end */
 
 /* Experimental start */
-if (routing_mode === 'custom') {
+if (routing_mode in ['bypass_mainland_china', 'custom']) {
 	config.experimental = {
 		cache_file: {
 			enabled: true,
 			path: RUN_DIR + '/cache.db',
 			store_rdrc: (cache_file_store_rdrc === '1') || null,
-			rdrc_timeout: cache_file_rdrc_timeout
+			rdrc_timeout: cache_file_rdrc_timeout ? (cache_file_rdrc_timeout + 's') : null,
 		}
 	};
 }
