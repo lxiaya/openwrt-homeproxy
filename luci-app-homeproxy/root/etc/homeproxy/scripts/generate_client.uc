@@ -435,7 +435,6 @@ if (!isEmpty(main_node)) {
 			server: 'china-dns'
 		});
 	}
-
 } else if (!isEmpty(default_outbound)) {
 	/* DNS servers */
 	uci.foreach(uciconfig, ucidnsserver, (cfg) => {
@@ -584,16 +583,53 @@ config.outbounds = [
 
 /* Main outbounds */
 if (!isEmpty(main_node)) {
-	const main_node_cfg = uci.get_all(uciconfig, main_node) || {};
-	push(config.outbounds, generate_outbound(main_node_cfg));
-	config.outbounds[length(config.outbounds)-1].domain_strategy = (ipv6_support !== '1') ? 'prefer_ipv4' : null;
-	config.outbounds[length(config.outbounds)-1].tag = 'main-out';
+	let urltest_nodes = [];
 
-	if (dedicated_udp_node) {
+	if (main_node === 'urltest') {
+		const main_urltest_nodes = uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [];
+		const main_urltest_interval = uci.get(uciconfig, ucimain, 'main_urltest_interval');
+		const main_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_urltest_tolerance');
+
+		push(config.outbounds, {
+			type: 'urltest',
+			tag: 'main-out',
+			outbounds: map(main_urltest_nodes, (k) => `cfg-${k}-out`),
+			interval: main_urltest_interval ? (main_urltest_interval + 's') : null,
+			tolerance: strToInt(main_urltest_tolerance),
+			idle_timeout: (strToInt(main_urltest_interval) > 1800) ? `${main_urltest_interval * 2}s` : null,
+		});
+		urltest_nodes = main_urltest_nodes;
+	} else {
+		const main_node_cfg = uci.get_all(uciconfig, main_node) || {};
+		push(config.outbounds, generate_outbound(main_node_cfg));
+		config.outbounds[length(config.outbounds)-1].domain_strategy = (ipv6_support !== '1') ? 'prefer_ipv4' : null;
+		config.outbounds[length(config.outbounds)-1].tag = 'main-out';
+	}
+
+	if (main_udp_node === 'urltest') {
+		const main_udp_urltest_nodes = uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [];
+		const main_udp_urltest_interval = uci.get(uciconfig, ucimain, 'main_udp_urltest_interval');
+		const main_udp_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_udp_urltest_tolerance');
+
+		push(config.outbounds, {
+			type: 'urltest',
+			tag: 'main-udp-out',
+			outbounds: map(main_udp_urltest_nodes, (k) => `cfg-${k}-out`),
+			interval: main_udp_urltest_interval ? (main_udp_urltest_interval + 's') : null,
+			tolerance: strToInt(main_udp_urltest_tolerance),
+			idle_timeout: (strToInt(main_udp_urltest_interval) > 1800) ? `${main_udp_urltest_interval * 2}s` : null,
+		});
+		urltest_nodes = [...urltest_nodes, ...filter(main_udp_urltest_nodes, (l) => !~index(urltest_nodes, l))];
+	} else if (dedicated_udp_node) {
 		const main_udp_node_cfg = uci.get_all(uciconfig, main_udp_node) || {};
 		push(config.outbounds, generate_outbound(main_udp_node_cfg));
 		config.outbounds[length(config.outbounds)-1].domain_strategy = (ipv6_support !== '1') ? 'prefer_ipv4' : null;
 		config.outbounds[length(config.outbounds)-1].tag = 'main-udp-out';
+	}
+
+	for (let i in urltest_nodes) {
+		push(config.outbounds, generate_outbound(uci.get_all(uciconfig, i)));
+		config.outbounds[length(config.outbounds)-1].domain_strategy = (ipv6_support !== '1') ? 'prefer_ipv4' : null;
 	}
 } else if (!isEmpty(default_outbound)) {
 	let urltest_nodes = [],
@@ -614,7 +650,7 @@ if (!isEmpty(main_node)) {
 				idle_timeout: cfg.urltest_idle_timeout ? (cfg.urltest_idle_timeout + 's') : null,
 				interrupt_exist_connections: (cfg.urltest_interrupt_exist_connections === '1')
 			});
-			urltest_nodes = [...urltest_nodes, ...filter(cfg.urltest_nodes, ((l) => !~index(urltest_nodes, l)))];
+			urltest_nodes = [...urltest_nodes, ...filter(cfg.urltest_nodes, (l) => !~index(urltest_nodes, l))];
 		} else {
 			const outbound = uci.get_all(uciconfig, cfg.node) || {};
 			push(config.outbounds, generate_outbound(outbound));
@@ -625,7 +661,7 @@ if (!isEmpty(main_node)) {
 		}
 	});
 
-	for (let i in filter(urltest_nodes, ((l) => !~index(routing_nodes, l))))
+	for (let i in filter(urltest_nodes, (l) => !~index(routing_nodes, l)))
 		push(config.outbounds, generate_outbound(uci.get_all(uciconfig, i)));
 }
 /* Outbound end */
@@ -646,10 +682,12 @@ config.route = {
 
 /* Routing rules */
 if (!isEmpty(main_node)) {
-	push(config.route.rules, {
-		rule_set: 'direct-domain',
-		outbound: 'direct-out'
-	});
+	/* Direct list */
+	if (length(direct_domain_list))
+		push(config.route.rules, {
+			rule_set: 'direct-domain',
+			outbound: 'direct-out'
+		});
 
 	/* Main UDP out */
 	if (dedicated_udp_node)
