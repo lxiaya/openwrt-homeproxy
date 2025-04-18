@@ -16,7 +16,7 @@ jobs:
         sdk:
           - 23.05.5
         arch:
-          - aarch64_cortex-a53
+          - aarch64_generic
           - x86_64
 
     steps:
