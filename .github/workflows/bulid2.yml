@@ -14,13 +14,13 @@ jobs:
       fail-fast: false
       matrix:
         sdk:
-          - 23.05.5
+          - 24.10.6
         arch:
           - aarch64_cortex-a53
           - x86_64
 
     steps:
-      - uses: actions/checkout@main
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -59,15 +59,20 @@ jobs:
           tag: v1.${{ github.run_number }}_${{ matrix.arch }}
 
       - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@main
+        uses: Mattraks/delete-workflow-runs@v2
         with:
           retain_days: 1
           keep_minimum_runs: 0
     
-      - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@master
-        with:
-          keep_latest: 3
-          delete_tags: true
+      - name: Delete old releases using GitHub CLI
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         env:
-           GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GH_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          tags=$(gh release list --limit 100 | tail -n +2 | awk '{print $1}')
+          if [ -n "$tags" ]; then
+            echo "$tags" | while read -r tag; do
+              echo "Deleting release and tag: \"$tag\""
+              gh release delete "$tag" --yes --cleanup-tag
+            done
+          fi
