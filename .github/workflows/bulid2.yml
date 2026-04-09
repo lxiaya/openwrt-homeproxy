@@ -2,6 +2,11 @@ name: bulid 2 package
 
 on:
   workflow_dispatch:
+    inputs:
+      plugins:
+        description: 'Input: empty/*=default packages, 1=updated in 1 day, 2=updated in 2 days, or package name(s)'
+        required: false
+        default: ''
   push:
     tags:
       - v.**
@@ -20,25 +25,45 @@ jobs:
           - x86_64
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
 
+      - name: Get packages to build
+        id: packages
+        run: |
+          input="${{ github.event.inputs.plugins }}"
+          
+          if [ -z "$input" ] || [ "$input" == "*" ]; then
+            # default packages
+            PACKAGES="luci-app-homeproxy sing-box"
+            echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          elif [ "$input" == "1" ]; then
+            PACKAGES=$(git log --since="1 days ago" --name-only --pretty=format: | grep -v '^$' | awk -F'/' '{print $1}' | sort -u | grep -v '^\.\|^$' | tr '\n' ' ' | sed 's/ $//')
+            echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          elif [ "$input" == "2" ]; then
+            PACKAGES=$(git log --since="2 days ago" --name-only --pretty=format: | grep -v '^$' | awk -F'/' '{print $1}' | sort -u | grep -v '^\.\|^$' | tr '\n' ' ' | sed 's/ $//')
+            echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          else
+            echo "packages=$input" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build
-        uses: openwrt/gh-action-sdk@main
+        uses: kenzok8/gh-action-sdk@hash
         env:
           ARCH: ${{ matrix.arch }}-${{ matrix.sdk }}
           FEEDNAME: packages_ci
-          PACKAGES: luci-app-homeproxy
+          PACKAGES: ${{ steps.packages.outputs.packages }}
           NO_REFRESH_CHECK: true
+          IGNORE_ERRORS: true
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@main
+      - name: Store packages
+        uses: actions/upload-artifact@v7.0.0
         with:
-          name: ${{ matrix.arch }}
+          name: ${{ matrix.arch }}-${{ matrix.sdk }}
           path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
 
-      - name: Zip ipk packages
+      - name: Zip packages
         run: |
           zip -j ${{ matrix.arch }}.zip bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
           echo -e "**Beta文件说明** 🎈:\n" >> release.txt
@@ -48,31 +73,62 @@ jobs:
           echo -e "4. Move ACL settings to a dedicated page \n" >> release.txt
           echo -e "5. Any other improvements \n" >> release.txt
           
-      - name: Create Release zip
-        uses: ncipollo/release-action@main
+      - name: Upload packages
+        uses: ncipollo/release-action@v1.21.0
         with:
           token: ${{ secrets.TOKEN }}
-          artifacts: "${{ matrix.arch }}.zip,bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"
+          artifacts: "${{ matrix.arch }}-${{ matrix.sdk }}.zip,bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"
           allowUpdates: true
           replacesArtifacts: true
           bodyFile: "release.txt"
-          tag: v1.${{ github.run_number }}_${{ matrix.arch }}
+          tag: ${{ github.run_number }}-${{ matrix.arch }}
 
       - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          retain_days: 1
-          keep_minimum_runs: 0
-    
-      - name: Delete old releases using GitHub CLI
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         env:
           GH_TOKEN: ${{ secrets.TOKEN }}
+          REPO: ${{ github.repository }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RETAIN_DAYS: "10"
+          KEEP_MINIMUM_RUNS: "2"
         run: |
-          tags=$(gh release list --limit 100 | tail -n +2 | awk '{print $1}')
-          if [ -n "$tags" ]; then
-            echo "$tags" | while read -r tag; do
-              echo "Deleting release and tag: \"$tag\""
-              gh release delete "$tag" --yes --cleanup-tag
-            done
+          set -euo pipefail
+          cutoff=$(date -u -d "${RETAIN_DAYS} days ago" +%s)
+          mapfile -t runs < <(gh run list --repo "$REPO" --workflow "$WORKFLOW_NAME" --limit 200 --json databaseId,createdAt --jq '.[] | [.databaseId, .createdAt] | @tsv')
+          total=${#runs[@]}
+          if [ "$total" -le "$KEEP_MINIMUM_RUNS" ]; then
+            echo "No workflow runs to delete ($total <= $KEEP_MINIMUM_RUNS)"
+            exit 0
           fi
+          index=0
+          for run in "${runs[@]}"; do
+            index=$((index + 1))
+            if [ "$index" -le "$KEEP_MINIMUM_RUNS" ]; then
+              continue
+            fi
+            run_id=${run%%$'\t'*}
+            created_at=${run#*$'\t'}
+            created_epoch=$(date -u -d "$created_at" +%s)
+            if [ "$created_epoch" -gt "$cutoff" ]; then
+              continue
+            fi
+            echo "Deleting workflow run $run_id ($created_at)"
+            gh api --method DELETE "repos/$REPO/actions/runs/$run_id" || true
+          done
+
+      - name: Remove old Releases
+        env:
+          GH_TOKEN: ${{ secrets.TOKEN }}
+          REPO: ${{ github.repository }}
+          KEEP: "60"
+        run: |
+          set -euo pipefail
+          mapfile -t tags < <(gh release list --repo "$REPO" --limit 200 --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[].tagName')
+          total=${#tags[@]}
+          if [ "$total" -le "$KEEP" ]; then
+            echo "No old releases to delete ($total <= $KEEP)"
+            exit 0
+          fi
+          for tag in "${tags[@]:$KEEP}"; do
+            echo "Deleting $tag"
+            gh release delete "$tag" --repo "$REPO" --yes --cleanup-tag || true
+          done
