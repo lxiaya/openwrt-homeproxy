@@ -14,7 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         sdk:
-          - 25.12.4
+          - 24.10.6
+          - 23.05.6
         arch:
           - aarch64_cortex-a53
           - x86_64
@@ -36,11 +37,11 @@ jobs:
         uses: actions/upload-artifact@main
         with:
           name: ${{ matrix.arch }}
-          path: bin/packages/${{ matrix.arch }}/packages_ci/*.apk
+          path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
 
-      - name: Zip apk packages
+      - name: Zip ipk packages
         run: |
-          zip -j ${{ matrix.arch }}.zip bin/packages/${{ matrix.arch }}/packages_ci/*.apk
+          zip -j ${{ matrix.arch }}.zip bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
           echo -e "**Beta文件说明** 🎈:\n" >> release.txt
           echo -e "1. Subscription page slow response with a large number of nodes \n" >> release.txt
           echo -e "2. Refactor nft rules \n" >> release.txt
@@ -52,7 +53,7 @@ jobs:
         uses: ncipollo/release-action@main
         with:
           token: ${{ secrets.TOKEN }}
-          artifacts: "${{ matrix.arch }}.zip,bin/packages/${{ matrix.arch }}/packages_ci/*.apk"
+          artifacts: "${{ matrix.arch }}.zip,bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"
           allowUpdates: true
           replacesArtifacts: true
           bodyFile: "release.txt"
