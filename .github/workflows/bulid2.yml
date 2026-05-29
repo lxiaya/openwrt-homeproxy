@@ -38,7 +38,7 @@ jobs:
           name: ${{ matrix.arch }}
           path: bin/packages/${{ matrix.arch }}/packages_ci/*.apk
 
-      - name: Zip ipk packages
+      - name: Zip apk packages
         run: |
           zip -j ${{ matrix.arch }}.zip bin/packages/${{ matrix.arch }}/packages_ci/*.apk
           echo -e "**Beta文件说明** 🎈:\n" >> release.txt
